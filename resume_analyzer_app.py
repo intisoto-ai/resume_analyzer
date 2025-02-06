@@ -13,6 +13,8 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.utils import simpleSplit
 import io
 
+import requests
+
 def generate_pdf():
     # Check if necessary data is available in session_state
     if "match_score" not in st.session_state or "feedback" not in st.session_state:
@@ -111,15 +113,36 @@ def extract_text(uploaded_file):
         return None
 
 # Function to analyze resume against job description
-def analyze_resume(resume_text, job_description):
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are an expert resume reviewer. Provide structured and constructive feedback on how well a resume matches a job description."},
-            {"role": "user", "content": f"Job Description:\n{job_description}\n\nResume:\n{resume_text}\n\nProvide structured feedback with improvements."}
-        ]
-    )
-    return response.choices[0].message.content
+def analyze_resume(resume_text, job_description, model_choice, openai_api_key):
+    """Uses either a free public LLM (Hugging Face) or OpenAI API for analysis."""
+    
+    if model_choice == "OpenAI API" and openai_api_key:
+        # Use OpenAI API
+        client = openai.OpenAI(api_key=openai_api_key)
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "You are an expert resume reviewer. Provide structured and constructive feedback."},
+                {"role": "user", "content": f"Job Description:\n{job_description}\n\nResume:\n{resume_text}\n\nProvide structured feedback with improvements."}
+            ]
+        )
+        return response.choices[0].message.content
+
+    else:
+        # Use Free Hugging Face API (Mistral-7B-Instruct)
+        API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct"
+        headers = {"Authorization": f"Bearer {st.secrets['HF_TOKEN']}"} if "HF_TOKEN" in st.secrets else {}
+        
+        payload = {
+            "inputs": f"Analyze this resume against the job description:\n\nJob Description:\n{job_description}\n\nResume:\n{resume_text}\n\nProvide structured feedback and improvements.",
+            "parameters": {"max_new_tokens": 300}
+        }
+        
+        response = requests.post(API_URL, headers=headers, json=payload)
+        if response.status_code == 200:
+            return response.json()[0]["generated_text"]
+        else:
+            return "⚠️ Free AI Model is currently unavailable. Please try again later."
 
 def extract_keywords(text):
     """Extracts key words from text by removing common stopwords."""
@@ -188,8 +211,14 @@ if "match_score" not in st.session_state:
 if "missing_keywords" not in st.session_state:
     st.session_state.missing_keywords = []
 
-# Toggle between analyze and improve
-invoke_ai = st.checkbox("Call OpenAI for analysis and improvement", value=False)
+# Model Selection
+model_choice = st.radio("Choose an AI Model:", ["Free Public AI", "OpenAI API"])
+
+# If OpenAI is selected, allow user to enter API Key
+openai_api_key = None
+if model_choice == "OpenAI API":
+    openai_api_key = st.text_input("Enter OpenAI API Key (Optional, for GPT-4 Access)", type="password")
+
 
 # Analyze Button
 if st.button("Analyze Resume"):
@@ -203,7 +232,7 @@ if st.button("Analyze Resume"):
                 st.session_state.job_description = job_description
                 st.session_state.resume_analyzed = True  # Mark analysis as done
 
-                feedback = analyze_resume(resume_text, job_description) if invoke_ai else "AI analysis disabled."
+                feedback = analyze_resume(resume_text, job_description, model_choice, openai_api_key) #if invoke_ai else "AI analysis disabled."
                 if feedback:
                     st.session_state.feedback = feedback
 
@@ -260,7 +289,7 @@ if st.session_state.resume_text and st.session_state.job_description:
     if st.button("Improve Resume"):
         st.subheader("✍️ AI-Suggested Resume Improvements")
         with st.spinner("Generating resume improvements..."):
-            improved_resume = improve_resume(st.session_state.resume_text, st.session_state.job_description) if invoke_ai else "AI analysis disabled." 
+            improved_resume = improve_resume(st.session_state.resume_text, st.session_state.job_description) #if invoke_ai else "AI analysis disabled." 
             st.write(improved_resume)
 
 # Allow User to Download AI Feedback as a PDF
