@@ -1,7 +1,7 @@
 streamlit
 openai
 pandas
-nltk
+nltk==3.9.1
 docx2txt
 PyPDF2
 reportlab
