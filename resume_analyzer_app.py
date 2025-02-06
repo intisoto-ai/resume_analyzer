@@ -15,6 +15,21 @@ import io
 
 import requests
 
+# Set a specific download directory for NLTK
+nltk_data_path = os.path.join(os.getcwd(), "nltk_data")
+nltk.data.path.append(nltk_data_path)
+
+# Download required NLTK packages only if they don't exist
+try:
+    nltk.data.find("tokenizers/punkt")
+except LookupError:
+    nltk.download("punkt", download_dir=nltk_data_path)
+
+try:
+    nltk.data.find("corpora/stopwords")
+except LookupError:
+    nltk.download("stopwords", download_dir=nltk_data_path)
+
 def generate_pdf():
     # Check if necessary data is available in session_state
     if "match_score" not in st.session_state or "feedback" not in st.session_state:
@@ -184,6 +199,10 @@ def improve_resume(resume_text, job_description):
 
 # Streamlit Web App
 st.title("📄 AI-Powered Resume Analyzer")
+
+# Language Selection Dropdown
+lang = st.selectbox("🌎 Language/Idioma:", ["English", "Español"])
+
 st.write("Upload your resume and provide a job description to get AI-generated feedback.")
 
 # File Upload
