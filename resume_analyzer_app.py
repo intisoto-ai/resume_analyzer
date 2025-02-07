@@ -143,7 +143,7 @@ translations = {
         "choose_model": "Elegir un Modelo de IA:",
         "free_public": "IA Pública Gratuita",
         "openai_api": "API de OpenAI",
-        "download_report": "📥 Descargar Informe"
+        "download_report": "📥 Descargar Informe",
         "download_feedback": "Descargar Retroalimentación de IA como PDF",
     },
 }
