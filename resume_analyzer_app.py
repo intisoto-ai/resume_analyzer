@@ -25,6 +25,9 @@ try:
 except LookupError:
     nltk.download("punkt", download_dir=nltk_data_path)
 
+    #nltk.download('wordnet', download_dir=nltk_data_path)
+    #nltk.download('omw-1.4', download_dir=nltk_data_path)
+
 try:
     nltk.data.find("corpora/stopwords")
 except LookupError:
@@ -200,6 +203,7 @@ def improve_resume(resume_text, job_description):
 # Streamlit Web App
 st.title("📄 AI-Powered Resume Analyzer")
 
+st.write(nltk_data_path)
 # Language Selection Dropdown
 lang = st.selectbox("🌎 Language/Idioma:", ["English", "Español"])
 
