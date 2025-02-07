@@ -103,13 +103,50 @@ def generate_pdf():
     buffer.seek(0)
     return buffer
 
-# OpenAI API Key
-api_key = os.getenv("OPENAI_API_KEY")
+# Set OpenAI API Key only if the user selects OpenAI
+api_key = None
+if "api_key" not in st.session_state:
+    st.session_state.api_key = None
 
-if api_key is None:
-    st.error("⚠️ OpenAI API key not found. Set it as an environment variable.")
-else:
-    client = openai.OpenAI(api_key=api_key)
+if st.session_state.get("use_openai", False):  # Only show if OpenAI is selected
+    api_key = st.text_input("Enter OpenAI API Key (Optional, for GPT-4 Access)", type="password")
+    if api_key:
+            st.session_state.api_key = api_key  # Store in session state
+
+translations = {
+    "English": {
+        "upload_resume": "Upload Resume (PDF/DOCX)",
+        "paste_job": "Paste Job Description Here",
+        "analyze_button": "Analyze Resume",
+        "feedback": "📝 Resume Feedback",
+        "match_score": "📊 Resume Match Score",
+        "missing_keywords": "🔍 Missing Keywords & Skills",
+        "improve_resume": "Improve Resume",
+        "download_report": "📥 Download Report",
+        "buy_me_coffee": "☕ If you like this app, consider supporting me:",
+        "choose_model": "Choose an AI Model:",
+        "free_public": "Free Public AI",
+        "openai_api": "OpenAI API",
+        "download_report": "📥 Download Report",
+        "download_feedback": "Download AI Feedback as PDF",
+    },
+    "Español": {
+        "upload_resume": "Subir Currículum (PDF/DOCX)",
+        "paste_job": "Pegar Descripción del Trabajo Aquí",
+        "analyze_button": "Analizar Currículum",
+        "feedback": "📝 Retroalimentación del Currículum",
+        "match_score": "📊 Puntaje de Coincidencia",
+        "missing_keywords": "🔍 Palabras Clave y Habilidades Faltantes",
+        "improve_resume": "Mejorar Currículum",
+        "download_report": "📥 Descargar Informe",
+        "buy_me_coffee": "☕ Si te gusta esta aplicación, considera apoyarme:",
+        "choose_model": "Elegir un Modelo de IA:",
+        "free_public": "IA Pública Gratuita",
+        "openai_api": "API de OpenAI",
+        "download_report": "📥 Descargar Informe"
+        "download_feedback": "Descargar Retroalimentación de IA como PDF",
+    },
+}
 
 # Function to read PDF files
 def read_pdf(file):
@@ -212,10 +249,10 @@ lang = st.selectbox("🌎 Language/Idioma:", ["English", "Español"])
 st.write("Upload your resume and provide a job description to get AI-generated feedback.")
 
 # File Upload
-uploaded_file = st.file_uploader("Upload Resume (PDF/DOCX)", type=["pdf", "docx"])
+uploaded_file = st.file_uploader(translations[lang]["upload_resume"], type=["pdf", "docx"])
 
 # Job Description Input
-job_description = st.text_area("Paste Job Description Here")
+job_description = st.text_area(translations[lang]["paste_job"])
 
 # Initialize session state variables
 if "resume_text" not in st.session_state:
@@ -237,18 +274,17 @@ if "missing_keywords" not in st.session_state:
     st.session_state.missing_keywords = []
 
 # Model Selection
-model_choice = st.radio("Choose an AI Model:", ["Free Public AI", "OpenAI API"])
+model_choice = st.radio(translations[lang]["choose_model"], translations[lang]["free_public"], translations[lang]["openai_api"])
 
 # If OpenAI is selected, allow user to enter API Key
 openai_api_key = None
 if model_choice == "OpenAI API":
     openai_api_key = st.text_input("Enter OpenAI API Key (Optional, for GPT-4 Access)", type="password")
 
-
 # Analyze Button
-if st.button("Analyze Resume"):
+if st.button(translations[lang]["analyze_button"]):
     if uploaded_file and job_description:
-        with st.spinner("Analyzing resume..."):
+        with st.spinner("Analyzing resume..."): # Add translation
             resume_text = extract_text(uploaded_file)
 
             if resume_text:
@@ -266,9 +302,8 @@ if st.button("Analyze Resume"):
 
                 # Display AI Feedback in the First Column
                 with col1:
-                    st.subheader("📝 Resume Feedback")
+                    st.subheader(translations[lang]["feedback"])
                     st.write(st.session_state.get("feedback", "No feedback yet."))
-
 
                 # Calculate Resume Match Score
                 match_score = calculate_resume_match_score(resume_text, job_description)
@@ -277,7 +312,7 @@ if st.button("Analyze Resume"):
     
                 # Display Resume Match Score in the Second Column
                 with col2:
-                    st.subheader("📊 Resume Match Score")
+                    st.subheader(translations[lang]["match_score"])
                     match_score = st.session_state.get("match_score", 0)
                     st.write(f"Your resume matches **{match_score}%** of the job description.")
 
@@ -295,7 +330,7 @@ if st.button("Analyze Resume"):
                     st.session_state.missing_keywords = missing_keywords
 
                 # Display Missing Skills
-                with st.expander("🔍 Missing Keywords & Skills", expanded=False):
+                with st.expander(translations[lang]["missing_keywords"], expanded=False):
                     missing_keywords = st.session_state.get("missing_keywords", [])
                     if missing_keywords:
                         st.write("Your resume is missing these key terms from the job description:")
@@ -311,15 +346,15 @@ if st.button("Analyze Resume"):
 
 # Generate AI Resume Improvements (Only if we have stored resume text)
 if st.session_state.resume_text and st.session_state.job_description:
-    if st.button("Improve Resume"):
-        st.subheader("✍️ AI-Suggested Resume Improvements")
+    if st.button(translations[lang]["improve_resume"]):
+        st.subheader("✍️ " + translations[lang]["improve_resume"])
         with st.spinner("Generating resume improvements..."):
             improved_resume = improve_resume(st.session_state.resume_text, st.session_state.job_description) #if invoke_ai else "AI analysis disabled." 
             st.write(improved_resume)
 
 # Allow User to Download AI Feedback as a PDF
-st.subheader("📥 Download Report")
-if st.button("Download AI Feedback as PDF"):
+st.subheader(translations[lang]["download_report"])
+if st.button(translations[lang]["improve_feedback"]):
     pdf_data = generate_pdf()
 
     if pdf_data:
@@ -331,3 +366,17 @@ if st.button("Download AI Feedback as PDF"):
         )
     else:
         st.error("No data available to download. Make sure you uploaded the resume and job description.")
+
+        
+# Show Support
+st.markdown(
+    f"""
+    ---
+    {translations[lang]["buy_me_coffee"]}
+    <a href="https://www.buymeacoffee.com/intisoto" target="_blank">
+        <img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=☕&slug=intisoto&button_colour=FFDD00&font_colour=000000&font_family=Arial&outline_colour=000000&coffee_colour=ffffff" 
+        alt="Buy Me A Coffee" width="200">
+    </a>
+    """,
+    unsafe_allow_html=True
+)
