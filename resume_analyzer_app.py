@@ -274,7 +274,7 @@ if "missing_keywords" not in st.session_state:
     st.session_state.missing_keywords = []
 
 # Model Selection
-model_choice = st.radio(translations[lang]["choose_model"], translations[lang]["free_public"], translations[lang]["openai_api"])
+model_choice = st.radio(translations[lang]["choose_model"], [translations[lang]["free_public"], translations[lang]["openai_api"]])
 
 # If OpenAI is selected, allow user to enter API Key
 openai_api_key = None
