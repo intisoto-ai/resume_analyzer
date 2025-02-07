@@ -17,21 +17,23 @@ import requests
 
 # Set a specific download directory for NLTK
 nltk_data_path = os.path.join(os.getcwd(), "nltk_data")
-nltk.data.path.append(nltk_data_path)
+
+# Avoid adding duplicate paths
+if nltk_data_path not in nltk.data.path:
+    nltk.data.path.append(nltk_data_path)
 
 # Download required NLTK packages only if they don't exist
-try:
-    nltk.data.find("tokenizers/punkt")
-except LookupError:
-    nltk.download("punkt", download_dir=nltk_data_path)
+def ensure_nltk_resources():
+    """Downloads necessary NLTK data if not already available."""
+    resources = ["punkt_tab", "stopwords"]
+    for resource in resources:
+        try:
+            nltk.data.find(f"tokenizers/{resource}" if resource == "punkt_tab" else f"corpora/{resource}")
+        except LookupError:
+            nltk.download(resource, download_dir=nltk_data_path)
 
-    #nltk.download('wordnet', download_dir=nltk_data_path)
-    #nltk.download('omw-1.4', download_dir=nltk_data_path)
-
-try:
-    nltk.data.find("corpora/stopwords")
-except LookupError:
-    nltk.download("stopwords", download_dir=nltk_data_path)
+# Call function to ensure NLTK resources are available
+ensure_nltk_resources()
 
 def generate_pdf():
     # Check if necessary data is available in session_state
