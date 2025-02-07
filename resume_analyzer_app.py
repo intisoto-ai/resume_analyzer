@@ -354,7 +354,7 @@ if st.session_state.resume_text and st.session_state.job_description:
 
 # Allow User to Download AI Feedback as a PDF
 st.subheader(translations[lang]["download_report"])
-if st.button(translations[lang]["improve_feedback"]):
+if st.button(translations[lang]["download_feedback"]):
     pdf_data = generate_pdf()
 
     if pdf_data:
