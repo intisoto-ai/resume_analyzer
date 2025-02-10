@@ -38,7 +38,7 @@ ensure_nltk_resources()
 def generate_pdf():
     # Check if necessary data is available in session_state
     if "match_score" not in st.session_state or "feedback" not in st.session_state:
-        st.error("Missing data for generating PDF. Please analyze the resume first.")
+        st.error(translations[lang]["no_data_pdf"])
         return None
 
     """Generates a well-formatted PDF report for the resume analysis."""
@@ -57,7 +57,7 @@ def generate_pdf():
 
     # Title
     c.setFont("Helvetica-Bold", 14)
-    c.drawString(100, y_position, "📄 AI-Powered Resume Analysis Report")
+    c.drawString(100, y_position, translations[lang]["pdf_title"])
     y_position -= 20
     c.setFont("Helvetica", 12)
     c.drawString(100, y_position, "--------------------------------------------------")
@@ -65,30 +65,30 @@ def generate_pdf():
 
     # Resume Match Score
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(100, y_position, "📊 Resume Match Score:")
+    c.drawString(100, y_position, translations[lang]["match_score"])
     y_position -= 20
     c.setFont("Helvetica", 11)
     match_score = st.session_state.get("match_score", 0)
-    c.drawString(100, y_position, f"Your resume matches {match_score}% of the job description.")
+    c.drawString(100, y_position, translations[lang]["resume_match_score"].format(match_score=match_score))
     y_position -= 30
 
     # AI Resume Feedback
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(100, y_position, "📝 AI Resume Feedback:")
+    c.drawString(100, y_position, translations[lang]["pdf_title_feedback"])
     y_position -= 20
     c.setFont("Helvetica", 10)
 
-    feedback = st.session_state.get("feedback", "No feedback available.")
+    feedback = st.session_state.get("feedback", translations[lang]["no_feedback"])
     if feedback:
         y_position = draw_wrapped_text(c, feedback, 100, y_position)
     else:
-        c.drawString(100, y_position, "No feedback available.")
+        c.drawString(100, y_position, translations[lang]["no_feedback"])
         y_position -= 20
 
     # Missing Keywords//
     y_position -= 20
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(100, y_position, "🔍 Missing Keywords & Skills:")
+    c.drawString(100, y_position, translations[lang]["pdf_title_keywords"])
     y_position -= 20
     c.setFont("Helvetica", 10)
     missing_keywords = st.session_state.get("missing_keywords", [])
@@ -96,7 +96,7 @@ def generate_pdf():
         keywords_text = ", ".join(missing_keywords)
         y_position = draw_wrapped_text(c, keywords_text, 100, y_position)
     else:
-        c.drawString(100, y_position, "✅ No missing skills detected.")
+        c.drawString(100, y_position, translations[lang]["keywords_included"])
 
     # Save PDF
     c.save()
@@ -115,36 +115,76 @@ if st.session_state.get("use_openai", False):  # Only show if OpenAI is selected
 
 translations = {
     "English": {
+        "main_title": "📄 AI-Powered Resume Analyzer",
+        "upload_instructions": "Upload your resume and provide a job description to get AI-generated feedback.",
         "upload_resume": "Upload Resume (PDF/DOCX)",
+        "input_apikey": "Enter OpenAI API Key (Optional, for GPT-4 Access)",
+        "spinner_analyzing": "Analyzing resume...",
+        "spinner_improving": "Generating resume improvements...",
         "paste_job": "Paste Job Description Here",
         "analyze_button": "Analyze Resume",
         "feedback": "📝 Resume Feedback",
+        "no_feedback": "No feedback available yet.",
         "match_score": "📊 Resume Match Score",
         "missing_keywords": "🔍 Missing Keywords & Skills",
         "improve_resume": "Improve Resume",
         "download_report": "📥 Download Report",
-        "buy_me_coffee": "☕ If you like this app, consider supporting me:",
+        "buy_me_coffee_message": "☕ If you like this app, consider supporting me:",
+        "buy_me_coffee": "Buy me a coffee",
         "choose_model": "Choose an AI Model:",
         "free_public": "Free Public AI",
         "openai_api": "OpenAI API",
         "download_report": "📥 Download Report",
         "download_feedback": "Download AI Feedback as PDF",
+        "free_ai_disabled": "⚠️ Free AI Model is currently unavailable. Please try again later.",
+        "resume_match_score": "Your resume matches **{match_score}%** of the job description.",
+        "match_excelent": "✅ Excellent match! Your resume aligns very well with this job.",
+        "match_good": "👍 Good match! Consider emphasizing missing keywords and refining work experience.",
+        "match_low": "⚠️ Low match score. Try tailoring your resume more closely to the job requirements.",
+        "keywords_missing": "Keywords Missing from Resume:",
+        "keywords_included": "✅ Your resume includes all important keywords from the job description!",
+        "unsupported_format": "Unsupported file format. Please upload a PDF or DOCX.",
+        "upload_resume_job_description": "Please upload a resume and enter a job description.",
+        "no_download_data": "No data available to download. Make sure you uploaded the resume and job description.",
+        "no_data_pdf": "Missing data for generating PDF. Please analyze the resume first.",
+        "pdf_title": "AI-Powered Resume Analysis Report",
+        "pdf_title_feedback": "📝 AI Resume Feedback",
+        "pdf_title_keywords": "🔍 Missing Keywords & Skills",
     },
     "Español": {
+        "main_title": "📄 Analizador de Currículum Impulsado por IA",
+        "upload_instructions": "Sube tu currículum y proporciona una descripción del trabajo para obtener retroalimentación generada por IA.",
         "upload_resume": "Subir Currículum (PDF/DOCX)",
+        "input_apikey": "Introduce la Clave de API de OpenAI (Opcional, para Acceso a GPT-4)",
+        "spinner_analyzing": "Analizando currículum...",
+        "spinner_improving": "Generando mejoras en el currículum...",
         "paste_job": "Pegar Descripción del Trabajo Aquí",
         "analyze_button": "Analizar Currículum",
         "feedback": "📝 Retroalimentación del Currículum",
+        "no_feedback": "No hay retroalimentación disponible aún.",
         "match_score": "📊 Puntaje de Coincidencia",
         "missing_keywords": "🔍 Palabras Clave y Habilidades Faltantes",
         "improve_resume": "Mejorar Currículum",
         "download_report": "📥 Descargar Informe",
-        "buy_me_coffee": "☕ Si te gusta esta aplicación, considera apoyarme:",
+        "buy_me_coffee_message": "☕ Si te gusta esta aplicación, considera apoyarme:",
+        "buy_me_coffee": "¡Invítame un café!",
         "choose_model": "Elegir un Modelo de IA:",
         "free_public": "IA Pública Gratuita",
         "openai_api": "API de OpenAI",
         "download_report": "📥 Descargar Informe",
         "download_feedback": "Descargar Retroalimentación de IA como PDF",
+        "free_ai_disabled": "⚠️ El modelo de IA gratuito no está disponible actualmente. Por favor, inténtalo de nuevo más tarde.",
+        "resume_match_score": "Tu currículum coincide con **{match_score}%** de la descripción del trabajo.",
+        "match_excelent": "✅ ¡Excelente coincidencia! Tu currículum se alinea muy bien con este trabajo.",
+        "match_good": "👍 ¡Buena coincidencia! Considera enfatizar las palabras clave faltantes y mejorar la experiencia laboral.",
+        "match_low": "⚠️ Puntaje de coincidencia bajo. Intenta adaptar tu currículum más estrechamente a los requisitos del trabajo.",
+        "keywords_missing": "Palabras Clave Faltantes en el Currículum:",
+        "keywords_included": "✅ ¡Tu currículum incluye todas las palabras clave importantes de la descripción del trabajo!",
+        "unsupported_format": "Formato de archivo no compatible. Por favor, sube un PDF o DOCX.",
+        "upload_resume_job_description": "Por favor, sube un currículum y escribe una descripción del trabajo.",
+        "no_download_data": "No hay datos disponibles para descargar. Asegúrate de haber subido el currículum y la descripción del trabajo.",
+        "no_data_pdf": "Faltan datos para generar el PDF. Por favor, analiza el currículum primero",
+        "pdf_title": "Informe de Análisis de Currículum Impulsado por IA",
     },
 }
 
@@ -199,7 +239,7 @@ def analyze_resume(resume_text, job_description, model_choice, openai_api_key):
         if response.status_code == 200:
             return response.json()[0]["generated_text"]
         else:
-            return "⚠️ Free AI Model is currently unavailable. Please try again later."
+            return translations[lang]["free_ai_disabled"]   
 
 def extract_keywords(text):
     """Extracts key words from text by removing common stopwords."""
@@ -240,13 +280,13 @@ def improve_resume(resume_text, job_description):
     return response.choices[0].message.content
 
 # Streamlit Web App
-st.title("📄 AI-Powered Resume Analyzer")
+st.title(translations[lang]["main_title"])
 
 st.write(nltk_data_path)
 # Language Selection Dropdown
 lang = st.selectbox("🌎 Language/Idioma:", ["English", "Español"])
 
-st.write("Upload your resume and provide a job description to get AI-generated feedback.")
+st.write(translations[lang]["upload_instructions"]) 
 
 # File Upload
 uploaded_file = st.file_uploader(translations[lang]["upload_resume"], type=["pdf", "docx"])
@@ -279,12 +319,12 @@ model_choice = st.radio(translations[lang]["choose_model"], [translations[lang][
 # If OpenAI is selected, allow user to enter API Key
 openai_api_key = None
 if model_choice == "OpenAI API":
-    openai_api_key = st.text_input("Enter OpenAI API Key (Optional, for GPT-4 Access)", type="password")
+    openai_api_key = st.text_input(translations[lang]["input_apikey"], type="password")
 
 # Analyze Button
 if st.button(translations[lang]["analyze_button"]):
     if uploaded_file and job_description:
-        with st.spinner("Analyzing resume..."): # Add translation
+        with st.spinner(translations[lang]["spinner_analyzing"] ): # Add translation
             resume_text = extract_text(uploaded_file)
 
             if resume_text:
@@ -303,7 +343,7 @@ if st.button(translations[lang]["analyze_button"]):
                 # Display AI Feedback in the First Column
                 with col1:
                     st.subheader(translations[lang]["feedback"])
-                    st.write(st.session_state.get("feedback", "No feedback yet."))
+                    st.write(st.session_state.get("feedback", translations[lang]["no_feedback"]))
 
                 # Calculate Resume Match Score
                 match_score = calculate_resume_match_score(resume_text, job_description)
@@ -314,15 +354,15 @@ if st.button(translations[lang]["analyze_button"]):
                 with col2:
                     st.subheader(translations[lang]["match_score"])
                     match_score = st.session_state.get("match_score", 0)
-                    st.write(f"Your resume matches **{match_score}%** of the job description.")
+                    st.write(translations[lang]["resume_match_score"].format(match_score=match_score))
 
                 # Provide feedback based on score
                 if match_score > 85:
-                    st.success("✅ Excellent match! Your resume aligns very well with this job.")
+                    st.success(translations[lang]["match_excelent"])
                 elif match_score > 65:
-                    st.info("👍 Good match! Consider emphasizing missing keywords and refining work experience.")
+                    st.info(translations[lang]["match_good"])
                 else:
-                    st.warning("⚠️ Low match score. Try tailoring your resume more closely to the job requirements.")
+                    st.warning(translations[lang]["match_low"])
 
                 # Perform Keyword Matching Analysis
                 missing_keywords = find_missing_keywords(resume_text, job_description)
@@ -333,22 +373,22 @@ if st.button(translations[lang]["analyze_button"]):
                 with st.expander(translations[lang]["missing_keywords"], expanded=False):
                     missing_keywords = st.session_state.get("missing_keywords", [])
                     if missing_keywords:
-                        st.write("Your resume is missing these key terms from the job description:")
+                        st.write(translations[lang]["keywords_missing"])
                         st.write(", ".join(missing_keywords))
                     else:
-                        st.write("✅ Your resume includes all important keywords from the job description!")
+                        st.write(translations[lang]["keywords_included"])
 
             else:
-                st.error("Unsupported file format. Please upload a PDF or DOCX.")
+                st.error(translations[lang]["unsupported_format"])
 
     else:
-        st.warning("Please upload a resume and enter a job description.")
+        st.warning(translations[lang]["upload_resume_job_description"])
 
 # Generate AI Resume Improvements (Only if we have stored resume text)
 if st.session_state.resume_text and st.session_state.job_description:
     if st.button(translations[lang]["improve_resume"]):
         st.subheader("✍️ " + translations[lang]["improve_resume"])
-        with st.spinner("Generating resume improvements..."):
+        with st.spinner(translations[lang]["spinner_improving"]):
             improved_resume = improve_resume(st.session_state.resume_text, st.session_state.job_description) #if invoke_ai else "AI analysis disabled." 
             st.write(improved_resume)
 
@@ -359,24 +399,27 @@ if st.button(translations[lang]["download_feedback"]):
 
     if pdf_data:
         st.download_button(
-            label="📄 Download Report",
+            label=translations[lang]["download_report"],
             data=pdf_data,
             file_name="resume_analysis.pdf",
             mime="application/pdf"
         )
     else:
-        st.error("No data available to download. Make sure you uploaded the resume and job description.")
+        st.error(translations[lang]["no_download_data"])
 
         
 # Show Support
 st.markdown(
-    f"""
+    """
     ---
-    {translations[lang]["buy_me_coffee"]}
+    {buy_me_coffee_message}
     <a href="https://www.buymeacoffee.com/intisoto" target="_blank">
-        <img src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=☕&slug=intisoto&button_colour=FFDD00&font_colour=000000&font_family=Arial&outline_colour=000000&coffee_colour=ffffff" 
-        alt="Buy Me A Coffee" width="200">
+        <img src="https://img.buymeacoffee.com/button-api/?text={buy_me_coffee}&emoji=☕&slug=intisoto&button_colour=FFDD00&font_colour=000000&font_family=Arial&outline_colour=000000&coffee_colour=ffffff" 
+        alt="{buy_me_coffee}" width="200">
     </a>
-    """,
+    """.format(
+        buy_me_coffee_message=translations[lang]["buy_me_coffee_message"].format(buy_me_coffee=translations[lang]["buy_me_coffee"]),
+        buy_me_coffee=translations[lang]["buy_me_coffee"]
+    ),
     unsafe_allow_html=True
 )
