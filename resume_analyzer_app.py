@@ -60,8 +60,8 @@ def generate_pdf():
     c.drawString(100, y_position, translations[lang]["pdf_title"])
     y_position -= 20
     c.setFont("Helvetica", 12)
-    c.drawString(100, y_position, "--------------------------------------------------")
-    y_position -= 30
+    # c.drawString(100, y_position, "--------------------------------------------------")
+    # y_position -= 30`
 
     # Resume Match Score
     c.setFont("Helvetica-Bold", 12)
@@ -137,7 +137,7 @@ translations = {
         "download_report": "📥 Download Report",
         "download_feedback": "Download AI Feedback as PDF",
         "free_ai_disabled": "⚠️ Free AI Model is currently unavailable. Please try again later.",
-        "resume_match_score": "Your resume matches **{match_score}%** of the job description.",
+        "resume_match_score": "Your resume matches {match_score}% of the job description.",
         "match_excelent": "✅ Excellent match! Your resume aligns very well with this job.",
         "match_good": "👍 Good match! Consider emphasizing missing keywords and refining work experience.",
         "match_low": "⚠️ Low match score. Try tailoring your resume more closely to the job requirements.",
@@ -185,6 +185,8 @@ translations = {
         "no_download_data": "No hay datos disponibles para descargar. Asegúrate de haber subido el currículum y la descripción del trabajo.",
         "no_data_pdf": "Faltan datos para generar el PDF. Por favor, analiza el currículum primero",
         "pdf_title": "Informe de Análisis de Currículum Impulsado por IA",
+        "pdf_title_feedback": "📝 Retroalimentación del Currículum por IA",
+        "pdf_title_keywords": "🔍 Palabras Clave y Habilidades Faltantes",
     },
 }
 
@@ -280,9 +282,11 @@ def improve_resume(resume_text, job_description):
     return response.choices[0].message.content
 
 # Streamlit Web App
+# Language Selection Dropdown
+lang = "English"
+
 st.title(translations[lang]["main_title"])
 
-st.write(nltk_data_path)
 # Language Selection Dropdown
 lang = st.selectbox("🌎 Language/Idioma:", ["English", "Español"])
 
