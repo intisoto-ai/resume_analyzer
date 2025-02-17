@@ -1,8 +1,13 @@
+import random
 import streamlit as st
-import openai
 import docx2txt
+import openai
 import PyPDF2
 import os
+import io
+import requests
+import re
+from openai import OpenAI
 
 import nltk
 from nltk.tokenize import word_tokenize
@@ -11,107 +16,55 @@ from nltk.corpus import stopwords
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import simpleSplit
-import io
 
-import requests
+from typing import Optional  # For type hints
 
-# Set a specific download directory for NLTK
+# --------------------------- GLOBAL CONSTANTS --------------------------- #
+
+HF_API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.3"
+MAX_NEW_TOKENS = 1024
+
+# --------------------------- NLTK SETUP -------------------------------- #
+
 nltk_data_path = os.path.join(os.getcwd(), "nltk_data")
-
-# Avoid adding duplicate paths
 if nltk_data_path not in nltk.data.path:
     nltk.data.path.append(nltk_data_path)
 
-# Download required NLTK packages only if they don't exist
 def ensure_nltk_resources():
-    """Downloads necessary NLTK data if not already available."""
-    resources = ["punkt_tab", "stopwords"]
+    resources = ["punkt", "stopwords"]
     for resource in resources:
         try:
-            nltk.data.find(f"tokenizers/{resource}" if resource == "punkt_tab" else f"corpora/{resource}")
+            nltk.data.find(f"tokenizers/{resource}" if resource == "punkt" else f"corpora/{resource}")
         except LookupError:
             nltk.download(resource, download_dir=nltk_data_path)
 
-# Call function to ensure NLTK resources are available
 ensure_nltk_resources()
 
-def generate_pdf():
-    # Check if necessary data is available in session_state
-    if "match_score" not in st.session_state or "feedback" not in st.session_state:
-        st.error(translations[lang]["no_data_pdf"])
-        return None
+# --------------------------- UTILITY FUNCTIONS -------------------------------- #
 
-    """Generates a well-formatted PDF report for the resume analysis."""
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter  
-    y_position = height - 50  
+def strip_markdown(text: str) -> str:
+    """Removes basic markdown syntax (bold, italics) so that text renders as plain text."""
+    text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)  # Bold
+    text = re.sub(r'\*(.*?)\*', r'\1', text)        # Italics
+    return text
 
-    def draw_wrapped_text(c, text, x, y, max_width=400, line_height=15):
-        """Handles text wrapping inside the PDF."""
-        wrapped_lines = simpleSplit(text, c._fontname, c._fontsize, max_width)
-        for line in wrapped_lines:
-            c.drawString(x, y, line)
-            y -= line_height
-        return y  # Return new y position
+# Define a callback function for when the language selection changes.
+def language_change():
+    st.session_state.lang = st.session_state.language_selection
 
-    # Title
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(100, y_position, translations[lang]["pdf_title"])
-    y_position -= 20
-    c.setFont("Helvetica", 12)
-    # c.drawString(100, y_position, "--------------------------------------------------")
-    # y_position -= 30`
+def get_hf_token():  # Function to retrieve the token
+    HF_TOKEN = os.environ.get("HF_TOKEN")  # Check for environment variable FIRST
 
-    # Resume Match Score
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(100, y_position, translations[lang]["match_score"])
-    y_position -= 20
-    c.setFont("Helvetica", 11)
-    match_score = st.session_state.get("match_score", 0)
-    c.drawString(100, y_position, translations[lang]["resume_match_score"].format(match_score=match_score))
-    y_position -= 30
+    if not HF_TOKEN:  # If environment variable is NOT set
+        try:
+            HF_TOKEN = st.secrets["HF_TOKEN"]  # Try Streamlit secrets
+        except KeyError:
+            st.error("HF_TOKEN secret not found. Set environment variable locally or Streamlit secret in the cloud.")
+            st.stop() #Stop the app execution
+            return None # Return None if no token is found
+    return HF_TOKEN  # Return the token if found
 
-    # AI Resume Feedback
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(100, y_position, translations[lang]["pdf_title_feedback"])
-    y_position -= 20
-    c.setFont("Helvetica", 10)
-
-    feedback = st.session_state.get("feedback", translations[lang]["no_feedback"])
-    if feedback:
-        y_position = draw_wrapped_text(c, feedback, 100, y_position)
-    else:
-        c.drawString(100, y_position, translations[lang]["no_feedback"])
-        y_position -= 20
-
-    # Missing Keywords//
-    y_position -= 20
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(100, y_position, translations[lang]["pdf_title_keywords"])
-    y_position -= 20
-    c.setFont("Helvetica", 10)
-    missing_keywords = st.session_state.get("missing_keywords", [])
-    if missing_keywords:
-        keywords_text = ", ".join(missing_keywords)
-        y_position = draw_wrapped_text(c, keywords_text, 100, y_position)
-    else:
-        c.drawString(100, y_position, translations[lang]["keywords_included"])
-
-    # Save PDF
-    c.save()
-    buffer.seek(0)
-    return buffer
-
-# Set OpenAI API Key only if the user selects OpenAI
-api_key = None
-if "api_key" not in st.session_state:
-    st.session_state.api_key = None
-
-if st.session_state.get("use_openai", False):  # Only show if OpenAI is selected
-    api_key = st.text_input("Enter OpenAI API Key (Optional, for GPT-4 Access)", type="password")
-    if api_key:
-            st.session_state.api_key = api_key  # Store in session state
+# --------------------------- TRANSLATIONS -------------------------------- #
 
 translations = {
     "English": {
@@ -128,13 +81,14 @@ translations = {
         "match_score": "📊 Resume Match Score",
         "missing_keywords": "🔍 Missing Keywords & Skills",
         "improve_resume": "Improve Resume",
-        "download_report": "📥 Download Report",
+        "resume_suggestions": "Resume Suggestions for Improvement",
+        "download_report": "Download Report",
         "buy_me_coffee_message": "☕ If you like this app, consider supporting me:",
         "buy_me_coffee": "Buy me a coffee",
         "choose_model": "Choose an AI Model:",
         "free_public": "Free Public AI",
         "openai_api": "OpenAI API",
-        "download_feedback": "Download AI Feedback as PDF",
+        "download_feedback": "Download Report",
         "free_ai_disabled": "⚠️ Free AI Model is currently unavailable. Please try again later.",
         "resume_match_score": "Your resume matches {match_score}% of the job description.",
         "match_excelent": "✅ Excellent match! Your resume aligns very well with this job.",
@@ -147,8 +101,17 @@ translations = {
         "no_download_data": "No data available to download. Make sure you uploaded the resume and job description.",
         "no_data_pdf": "Missing data for generating PDF. Please analyze the resume first.",
         "pdf_title": "AI-Powered Resume Analysis Report",
-        "pdf_title_feedback": "📝 AI Resume Feedback",
+        "pdf_title_feedback": "📝 AI Resume Analysis",
+        "pdf_title_improvement": "✍️ AI Improved Resume Suggestions",
         "pdf_title_keywords": "🔍 Missing Keywords & Skills",
+        "free_provide_feedback": (
+            "Provide structured feedback with improvements, focusing only on analysis without repeating the inputs. "
+            "Format your response as a bullet list with no more than 12 points. Begin your response by stating "
+            "'This feedback contains X points:' where X is the number of bullet points provided."
+        ),
+        "clear_results": "Clear Results",
+        "keep_inputs": "Keep resume and job description",
+        "resume_text_preview": "Resume Text Preview",
     },
     "Español": {
         "main_title": "📄 Analizador de Currículum Impulsado por IA",
@@ -164,13 +127,14 @@ translations = {
         "match_score": "📊 Puntaje de coincidencia",
         "missing_keywords": "🔍 Palabras clave y habilidades faltantes",
         "improve_resume": "Mejorar currículum",
-        "download_report": "📥 Descargar reporte",
+        "resume_suggestions": "Mejoras sugeridas al currículum",
+        "download_report": "Descargar Reporte",
         "buy_me_coffee_message": "☕ Si te gusta esta aplicación, considera apoyarme:",
         "buy_me_coffee": "¡Invítame un café!",
         "choose_model": "Elegir un modelo de IA:",
         "free_public": "IA pública gratuita",
         "openai_api": "API de OpenAI",
-        "download_feedback": "Descargar retroalimentación de IA como PDF",
+        "download_feedback": "Descargar Reporte",
         "free_ai_disabled": "⚠️ El modelo de IA gratuito no está disponible actualmente. Por favor, inténtalo de nuevo más tarde.",
         "resume_match_score": "Tu currículum coincide con un **{match_score}%** de la descripción del puesto.",
         "match_excelent": "✅ ¡Excelente coincidencia! Tu currículum se alinea muy bien con este puesto.",
@@ -183,25 +147,35 @@ translations = {
         "no_download_data": "No hay datos disponibles para descargar. Asegúrate de haber subido el currículum y la descripción del puesto.",
         "no_data_pdf": "Faltan datos para generar el PDF. Por favor, analiza el currículum primero",
         "pdf_title": "Reporte de análisis de currículum generado por IA",
-        "pdf_title_feedback": "📝 Retroalimentación del currículum por IA",
+        "pdf_title_feedback": "📝 Análisis del Currículum",
+        "pdf_title_improvement": "✍️ Sugerencias de Mejora de Currículum",
         "pdf_title_keywords": "🔍 Palabras clave y habilidades faltantes",
+        "free_provide_feedback": (
+            "Proporciona retroalimentación estructurada con mejoras, enfocándote solo en el análisis sin repetir las entradas. "
+            "Formatea la respuesta como una lista de viñetas con no más de 12 puntos. Comienza tu respuesta indicando "
+            "'Esta retroalimentación contiene X puntos:' donde X es el número de viñetas proporcionadas."
+        ),
+        "clear_results": "Borrar resultados",
+        "keep_inputs": "Conservar currículum y descripción del puesto",
+        "resume_text_preview": "Vista previa del texto del currículum",
     },
 }
 
-# Function to read PDF files
-def read_pdf(file):
+# --------------------------- FILE READERS -------------------------------- #
+
+def read_pdf(file) -> str:
+    """Extracts all text from a PDF file."""
     reader = PyPDF2.PdfReader(file)
-    text = "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+    text = "\n".join(page.extract_text() or "" for page in reader.pages)
     return text
 
-# Function to read DOCX files
-def read_docx(file):
+def read_docx(file) -> str:
+    """Extracts all text from a DOCX file."""
     return docx2txt.process(file)
 
-# Function to extract text from file
-def extract_text(uploaded_file):
-    file_extension = uploaded_file.name.split(".")[-1]
-    
+def extract_text(uploaded_file) -> Optional[str]:
+    """Dispatches to the correct file reader depending on the extension."""
+    file_extension = uploaded_file.name.split(".")[-1].lower()
     if file_extension == "pdf":
         return read_pdf(uploaded_file)
     elif file_extension == "docx":
@@ -209,219 +183,407 @@ def extract_text(uploaded_file):
     else:
         return None
 
-# Function to analyze resume against job description
-def analyze_resume(resume_text, job_description, model_choice, openai_api_key):
-    """Uses either a free public LLM (Hugging Face) or OpenAI API for analysis."""
-    
-    if model_choice == "OpenAI API" and openai_api_key:
-        # Use OpenAI API
-        client = openai.OpenAI(api_key=openai_api_key)
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "You are an expert resume reviewer. Provide structured and constructive feedback."},
-                {"role": "user", "content": f"Job Description:\n{job_description}\n\nResume:\n{resume_text}\n\nProvide structured feedback with improvements in {lang}."}
-            ]
-        )
-        return response.choices[0].message.content
+# --------------------------- ANALYSIS FUNCTIONS -------------------------------- #
 
-    else:
-        # Use Free Hugging Face API (Mistral-7B-Instruct)
-        API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct"
-        headers = {"Authorization": f"Bearer {st.secrets['HF_TOKEN']}"} if "HF_TOKEN" in st.secrets else {}
-        
-        payload = {
-            "inputs": f"Analyze this resume against the job description:\n\nJob Description:\n{job_description}\n\nResume:\n{resume_text}\n\nProvide structured feedback and improvements.",
-            "parameters": {"max_new_tokens": 300}
-        }
-        
-        response = requests.post(API_URL, headers=headers, json=payload)
-        if response.status_code == 200:
-            return response.json()[0]["generated_text"]
-        else:
-            return translations[lang]["free_ai_disabled"]   
-
-def extract_keywords(text):
-    """Extracts key words from text by removing common stopwords."""
+def extract_keywords(text: str) -> set:
+    """
+    Extracts keywords using a regex to get only alphabetic words.
+    This avoids including tokens with digits (e.g. '401k', 'hours') that are not relevant as skills.
+    """
     stop_words = set(stopwords.words("english"))
-    words = word_tokenize(text.lower())  # Tokenize words
-    keywords = [word for word in words if word.isalnum() and word not in stop_words]  # Remove stopwords & punctuation
+    words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
+    keywords = [word for word in words if word not in stop_words]
     return set(keywords)
 
-def find_missing_keywords(resume_text, job_description):
-    """Finds keywords in job description that are missing from the resume."""
+def find_missing_keywords(resume_text: str, job_description: str) -> list:
+    """Finds keywords present in the job description but missing in the resume."""
     job_keywords = extract_keywords(job_description)
     resume_keywords = extract_keywords(resume_text)
-    missing_keywords = job_keywords - resume_keywords
-    return list(missing_keywords)
+    missing = job_keywords - resume_keywords
+    return list(missing)
 
-def calculate_resume_match_score(resume_text, job_description):
-    """Calculates a match score (0-100%) based on resume vs job description similarity."""
-    
+def calculate_resume_match_score(resume_text: str, job_description: str) -> float:
+    """
+    Calculates a match score (0-100%) based on how many job description
+    keywords appear in the resume text.
+    """
     resume_keywords = extract_keywords(resume_text)
     job_keywords = extract_keywords(job_description)
-    
-    # Score based on keyword overlap
+    if not job_keywords:
+        return 0.0
     matched_keywords = resume_keywords.intersection(job_keywords)
-    match_score = (len(matched_keywords) / len(job_keywords)) * 100 if len(job_keywords) > 0 else 0
-    
-    # Normalize score to 100
+    match_score = (len(matched_keywords) / len(job_keywords)) * 100
     return round(match_score, 2)
 
-def improve_resume(resume_text, job_description):
-    """Uses GPT-4 to generate improved resume bullet points and suggestions."""
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "You are an expert resume writer. Improve weak sections of the resume to better align with the job description."},
-            {"role": "user", "content": f"Job Description:\n{job_description}\n\nResume:\n{resume_text}\n\nProvide improved resume bullet points and suggestions."}
-        ]
-    )
-    return response.choices[0].message.content
+def analyze_resume(resume_text, job_description, model_choice, openai_api_key, lang):
+    """
+    Uses either OpenAI GPT-4 or Hugging Face API to analyze the resume.
+    Returns the full feedback text.
+    """
+    if model_choice == translations[lang]["openai_api"] and openai_api_key:
+        client = OpenAI(api_key=openai_api_key)
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", 
+                     "content": "You are an expert resume reviewer. Provide structured and constructive feedback."},
+                    {"role": "user", 
+                     "content": (
+                         f"Job Description:\n{job_description}\n\nResume:\n{resume_text}\n\n"
+                         "Format your response as a bullet list with no more than 12 points. "
+                         "Begin your response by stating 'This feedback contains X points:' where X is the number of bullet points provided. "
+                         "Provide all feedback improvements in " + lang + "."
+                     )}
+                ]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"OpenAI API Error: {e}"
+    else:
+        HF_TOKEN = get_hf_token()  # Retrieve the token
+        if HF_TOKEN:
+            headers = {"Authorization": f"Bearer {HF_TOKEN}"} # Use the token to authenticate
+        else:
+            return translations[lang]["free_ai_disabled"]
 
-# Streamlit Web App
-# Language Selection Dropdown
-lang = "English"
+        prompt = f"""
+Analyze the following resume against the job description provided.
 
-st.title(translations[lang]["main_title"])
+**Job Description:**  
+{job_description}
 
-# Language Selection Dropdown
-lang = st.selectbox("🌎 Language/Idioma:", ["English", "Español"])
+**Resume:**  
+{resume_text}
 
-st.write(translations[lang]["upload_instructions"]) 
+{translations[lang]["free_provide_feedback"]}
+*+*
+"""
+        payload = {"inputs": prompt, "parameters": {"max_new_tokens": MAX_NEW_TOKENS}}
+        response = requests.post(HF_API_URL, headers=headers, json=payload)
+        if response.status_code == 200:
+            full_response = response.json()[0].get("generated_text", "")
+            if "*+*" in full_response:
+                ai_response = full_response.split("*+*")[-1].strip()
+            else:
+                ai_response = full_response.strip()
+            return ai_response
+        else:
+            return translations[lang]["free_ai_disabled"]
 
-# File Upload
-uploaded_file = st.file_uploader(translations[lang]["upload_resume"], type=["pdf", "docx"])
+def improve_resume(resume_text, job_description, model_choice, openai_api_key, lang):
+    """
+    Uses either OpenAI GPT-4 or Hugging Face API to generate improved resume suggestions.
+    Returns a string with improved resume suggestions.
+    """
+    if model_choice == translations[lang]["openai_api"] and openai_api_key:
+        client = OpenAI(api_key=openai_api_key)
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", 
+                     "content": "You are an expert resume writer. Improve weak sections of the resume to better align with the job description."},
+                    {"role": "user", 
+                     "content": (
+                         f"Job Description:\n{job_description}\n\nResume:\n{resume_text}\n\n"
+                         "Format your response as a bullet list with no more than 12 points. "
+                         "Begin your response by stating 'This feedback contains X points:' where X is the number of bullet points provided. "
+                         "Provide all improved resume suggestions in " + lang + "."
+                     )}
+                ]
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"OpenAI API Error: {e}"
+    else:
+        HF_TOKEN = get_hf_token()  # Retrieve the token
+        if HF_TOKEN:
+            headers = {"Authorization": f"Bearer {HF_TOKEN}"} # Use the token to authenticate
+        else:
+            return translations[lang]["free_ai_disabled"]
 
-# Job Description Input
-job_description = st.text_area(translations[lang]["paste_job"])
+        prompt = f"""
+Improve the following resume to better align with the job description.
 
-# Initialize session state variables
+**Job Description:**  
+{job_description}
+
+**Resume:**  
+{resume_text}
+
+Format your response as a bullet list with no more than 12 points. 
+Begin your response by stating 'This feedback contains X points:' where X is the number of bullet points provided. 
+Provide all improved resume suggestions in {lang}. 
+*+*
+"""
+        payload = {"inputs": prompt, "parameters": {"max_new_tokens": MAX_NEW_TOKENS}}
+        response = requests.post(HF_API_URL, headers=headers, json=payload)
+        if response.status_code == 200:
+            full_response = response.json()[0].get("generated_text", "")
+            if "*+*" in full_response:
+                ai_response = full_response.split("*+*")[-1].strip()
+            else:
+                ai_response = full_response.strip()
+            return ai_response
+        else:
+            return translations[lang]["free_ai_disabled"]
+
+# --------------------------- PDF GENERATION -------------------------------- #
+
+def draw_text_block(c, text, x, y, max_width, line_height):
+    """Draws wrapped text (after stripping markdown) and returns the new y-position."""
+    plain_text = strip_markdown(text)
+    lines = simpleSplit(plain_text, c._fontname, c._fontsize, max_width)
+    for line in lines:
+        c.drawString(x, y, line)
+        y -= line_height
+    return y
+
+def draw_page_number(c, page_num, width, height):
+    c.setFont("Helvetica", 8)
+    c.drawRightString(width - 40, 20, f"Page {page_num}")
+
+def generate_pdf(lang):
+    """
+    Generates a multi-page PDF report including:
+      - Page 1: Analysis Feedback
+      - Page 2: Improved Resume Suggestions (if available)
+      - Page 3: Missing Keywords
+    Each page includes page numbering.
+    """
+    if "match_score" not in st.session_state or "feedback" not in st.session_state:
+        st.error(translations[lang]["no_data_pdf"])
+        return None
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    page_num = 1
+
+    # Page 1: Title and Analysis Feedback
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(100, height - 50, translations[lang]["pdf_title"])
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(100, height - 80, translations[lang]["pdf_title_feedback"])
+    c.setFont("Helvetica", 10)
+    feedback = st.session_state.get("feedback", translations[lang]["no_feedback"])
+    y_position = height - 110
+    y_position = draw_text_block(c, feedback, 100, y_position, width - 150, 15)
+    draw_page_number(c, page_num, width, height)
+    c.showPage()
+    page_num += 1
+
+    # Page 2: Improved Resume Suggestions (if available)
+    if st.session_state.get("improved_resume"):
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(100, height - 50, translations[lang]["pdf_title_improvement"])
+        c.setFont("Helvetica", 10)
+        improved = st.session_state.get("improved_resume", "")
+        y_position = height - 80
+        y_position = draw_text_block(c, improved, 100, y_position, width - 150, 15)
+        draw_page_number(c, page_num, width, height)
+        c.showPage()
+        page_num += 1
+
+    # Page 3: Missing Keywords
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(100, height - 50, translations[lang]["pdf_title_keywords"])
+    c.setFont("Helvetica", 10)
+    missing_keywords = st.session_state.get("missing_keywords", [])
+    y_position = height - 80
+    if missing_keywords:
+        keywords_text = ", ".join(missing_keywords)
+        y_position = draw_text_block(c, keywords_text, 100, y_position, width - 150, 15)
+    else:
+        c.drawString(100, y_position, translations[lang]["keywords_included"])
+    draw_page_number(c, page_num, width, height)
+    c.showPage()
+
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+# --------------------------- STREAMLIT UI -------------------------------- #
+
+# Keep language selection in session state
+if "lang" not in st.session_state:
+    st.session_state.lang = "English"
 if "resume_text" not in st.session_state:
     st.session_state.resume_text = None
-
 if "job_description" not in st.session_state:
     st.session_state.job_description = None
+if "uploaded_file" not in st.session_state:
+    st.session_state.uploaded_file = None
+if "job_description_text" not in st.session_state: # Store the text separately
+    st.session_state.job_description_text = None
 
-if "resume_analyzed" not in st.session_state:
-    st.session_state.resume_analyzed = False  # Track if analysis was performed
+st.title(translations[st.session_state.lang]["main_title"])
+st.write(translations[st.session_state.lang]["upload_instructions"])
 
-if "feedback" not in st.session_state:
-    st.session_state.feedback = None
+lang = st.selectbox("🌎 Language/Idioma:", 
+                    ["English", "Español"], 
+                    index=["English", "Español"].index(st.session_state.lang),
+                    key="language_selection",
+                    on_change=language_change)
+st.session_state.lang = lang
 
-if "match_score" not in st.session_state:
-    st.session_state.match_score = 0
+# Create a container for the Clear Results button and the checkbox.
+col1, col2 = st.columns([2, 3])
+with col1:
+    if st.button(translations[lang]["clear_results"], key="clear_results_button"):
+        # If the checkbox is not checked, clear the resume inputs as well.
+        if not st.session_state.get("keep_inputs", False):
+             # Reset the file uploader by changing its key
+            st.session_state.file_uploader_key = str(random.randint(1000, 9999))  # New random key
+            st.session_state.uploaded_file = None #Clear uploaded file from session state
+            st.session_state.resume_text = None #Clear resume text from session state
+            st.session_state.just_uploaded = False # Reset the just_uploaded flag
+            st.session_state.job_description_text = None #Clear job description from session state
+            st.session_state.job_description = None #Clear job description from session state
 
-if "missing_keywords" not in st.session_state:
-    st.session_state.missing_keywords = []
+        # Always clear these result variables.
+        for key in ["resume_analyzed", "feedback", "improved_resume", "match_score", "missing_keywords"]:
+            st.session_state[key] = None
 
-# Model Selection
-model_choice = st.radio(translations[lang]["choose_model"], [translations[lang]["free_public"], translations[lang]["openai_api"]])
+with col2:
+    keep_inputs = st.checkbox(translations[lang]["keep_inputs"], value=False, key="keep_inputs")
 
-# If OpenAI is selected, allow user to enter API Key
+
+# Use a key for the file uploader that changes when you want to reset it
+if "file_uploader_key" not in st.session_state:
+    st.session_state.file_uploader_key = "initial_key"  # Initial key
+
+uploaded_file = st.file_uploader(translations[lang]["upload_resume"], type=["pdf", "docx"], key="uploaded_file_key")
+
+if uploaded_file is not None:
+    st.session_state.just_uploaded = True # Flag to indicate a new upload
+    st.session_state.uploaded_file = uploaded_file  # Store uploaded file object
+    st.session_state.resume_text = extract_text(uploaded_file) # Extract and store text immediately
+elif "uploaded_file" in st.session_state and not hasattr(st.session_state, "just_uploaded"): # Check if there's an existing file in session state and ensure that it's not a new upload
+    uploaded_file = st.session_state.uploaded_file  # Retrieve the file object
+    # Display the extracted text in an expander immediately after upload
+    if "resume_text" not in st.session_state: #If the text is not in the session state
+        st.session_state.resume_text = extract_text(uploaded_file) # Extract it
+else:
+    st.session_state.just_uploaded = False # Reset the just_uploaded flag
+
+if st.session_state.get("resume_text"): # Check using get() to avoid KeyError
+    with st.expander(translations[lang]["resume_text_preview"], expanded=False):  # Add expander
+        st.write(st.session_state.resume_text)  # Show resume text
+
+job_description = st.text_area(translations[lang]["paste_job"], 
+                               key="job_description_key",
+                               value=st.session_state.job_description_text)
+if job_description is not None:
+    st.session_state.job_description_text = job_description # Store the text
+    st.session_state.job_description = job_description  # Keep the old variable for compatibility
+
+#st.write(st.session_state.resume_text[:15])  # Show job description text
+#st.write(st.session_state.job_description_text[:15])  # Show job description text
+
+# Initialize session state variables (if not already)
+for key, default in [
+    ("resume_text", None),
+    ("job_description", None),
+    ("resume_analyzed", False),
+    ("feedback", None),
+    ("improved_resume", None),
+    ("match_score", 0),
+    ("missing_keywords", []),
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+model_choice = st.radio(
+    translations[lang]["choose_model"],
+    [translations[lang]["free_public"], translations[lang]["openai_api"]]
+)
+
 openai_api_key = None
-if model_choice == "OpenAI API":
+if model_choice == translations[lang]["openai_api"]:
     openai_api_key = st.text_input(translations[lang]["input_apikey"], type="password")
 
-# Analyze Button
-if st.button(translations[lang]["analyze_button"]):
-    if uploaded_file and job_description:
-        with st.spinner(translations[lang]["spinner_analyzing"] ): # Add translation
-            resume_text = extract_text(uploaded_file)
+# Analyze Resume Button
+if st.button(translations[lang]["analyze_button"], key="analyze_button"):
+    if st.session_state.uploaded_file and st.session_state.job_description_text: # Use the stored text
+        with st.spinner(translations[lang]["spinner_analyzing"]):
+            # No need to extract text again, it's already in st.session_state.resume_text
+            st.session_state.resume_analyzed = True
+            analysis = analyze_resume(st.session_state.resume_text, st.session_state.job_description_text, model_choice, openai_api_key, lang)
+            st.session_state.feedback = analysis
 
-            if resume_text:
-                 # Store analyzed text in session state
-                st.session_state.resume_text = resume_text
-                st.session_state.job_description = job_description
-                st.session_state.resume_analyzed = True  # Mark analysis as done
+            match_score = calculate_resume_match_score(st.session_state.resume_text, st.session_state.job_description_text)
+            st.session_state.match_score = match_score
 
-                feedback = analyze_resume(resume_text, job_description, model_choice, openai_api_key) #if invoke_ai else "AI analysis disabled."
-                if feedback:
-                    st.session_state.feedback = feedback
-
-                # Create two columns for better UI structure
-                col1, col2 = st.columns(2)
-
-                # Display AI Feedback in the First Column
-                with col1:
-                    st.subheader(translations[lang]["feedback"])
-                    st.write(st.session_state.get("feedback", translations[lang]["no_feedback"]))
-
-                # Calculate Resume Match Score
-                match_score = calculate_resume_match_score(resume_text, job_description)
-                if match_score:
-                    st.session_state.match_score = match_score
-    
-                # Display Resume Match Score in the Second Column
-                with col2:
-                    st.subheader(translations[lang]["match_score"])
-                    match_score = st.session_state.get("match_score", 0)
-                    st.write(translations[lang]["resume_match_score"].format(match_score=match_score))
-
-                # Provide feedback based on score
-                if match_score > 85:
-                    st.success(translations[lang]["match_excelent"])
-                elif match_score > 65:
-                    st.info(translations[lang]["match_good"])
-                else:
-                    st.warning(translations[lang]["match_low"])
-
-                # Perform Keyword Matching Analysis
-                missing_keywords = find_missing_keywords(resume_text, job_description)
-                if missing_keywords:
-                    st.session_state.missing_keywords = missing_keywords
-
-                # Display Missing Skills
-                with st.expander(translations[lang]["missing_keywords"], expanded=False):
-                    missing_keywords = st.session_state.get("missing_keywords", [])
-                    if missing_keywords:
-                        st.write(translations[lang]["keywords_missing"])
-                        st.write(", ".join(missing_keywords))
-                    else:
-                        st.write(translations[lang]["keywords_included"])
-
-            else:
-                st.error(translations[lang]["unsupported_format"])
-
+            missing = find_missing_keywords(st.session_state.resume_text, st.session_state.job_description_text)
+            st.session_state.missing_keywords = missing
     else:
         st.warning(translations[lang]["upload_resume_job_description"])
 
-# Generate AI Resume Improvements (Only if we have stored resume text)
-if st.session_state.resume_text and st.session_state.job_description:
-    if st.button(translations[lang]["improve_resume"]):
-        st.subheader("✍️ " + translations[lang]["improve_resume"])
+# Display Match Score
+if st.session_state.get("resume_analyzed"):
+    st.subheader(translations[lang]["match_score"])
+    st.write(translations[lang]["resume_match_score"].format(match_score=st.session_state.match_score))
+    if st.session_state.match_score >= 90:
+        st.success(translations[lang]["match_excelent"])
+    elif st.session_state.match_score >= 70:
+        st.info(translations[lang]["match_good"])
+    else:
+        st.warning(translations[lang]["match_low"])
+
+# Always display Analysis if available
+if st.session_state.get("feedback"):
+    st.subheader(translations[lang]["feedback"])
+    st.markdown(st.session_state.feedback, unsafe_allow_html=True)
+
+# Improve Resume Button (does not remove the Analysis)
+if st.session_state.get("resume_text") and st.session_state.get("job_description"):
+    if st.button(translations[lang]["improve_resume"], key="improve_button"):
         with st.spinner(translations[lang]["spinner_improving"]):
-            improved_resume = improve_resume(st.session_state.resume_text, st.session_state.job_description) #if invoke_ai else "AI analysis disabled." 
-            st.write(improved_resume)
+            improved = improve_resume(
+                st.session_state.resume_text,
+                st.session_state.job_description,
+                model_choice,
+                openai_api_key,
+                lang
+            )
+            st.session_state.improved_resume = improved
 
-# Allow User to Download AI Feedback as a PDF
-st.subheader(translations[lang]["download_report"])
-if st.button(translations[lang]["download_feedback"]):
-    pdf_data = generate_pdf()
+# Always display Improved Resume if available
+if st.session_state.get("improved_resume"):
+    st.subheader(translations[lang]["resume_suggestions"])
+    st.markdown(st.session_state.improved_resume, unsafe_allow_html=True)
 
+# Display Missing Keywords before the download button
+if st.session_state.get("resume_analyzed"):
+    with st.expander(translations[lang]["missing_keywords"], expanded=False):
+        if st.session_state.missing_keywords:
+            st.write(", ".join(st.session_state.missing_keywords))
+        else:
+            st.info(translations[lang]["keywords_included"])
+
+# Download Report Button (single button for the complete PDF)
+if st.session_state.get("feedback"):
+    st.subheader(translations[lang]["download_report"])
+    pdf_data = generate_pdf(lang)
     if pdf_data:
         st.download_button(
             label=translations[lang]["download_report"],
             data=pdf_data,
             file_name="resume_analysis.pdf",
-            mime="application/pdf"
+            mime="application/pdf",
+            key="download_pdf"
         )
     else:
         st.error(translations[lang]["no_download_data"])
 
-        
-# Show Support
-st.markdown(
-    """
-    ---
-    {buy_me_coffee_message}
-    <a href="https://www.buymeacoffee.com/intisoto" target="_blank">
-        <img src="https://img.buymeacoffee.com/button-api/?text={buy_me_coffee}&emoji=☕&slug=intisoto&button_colour=FFDD00&font_colour=000000&font_family=Arial&outline_colour=000000&coffee_colour=ffffff" 
-        alt="{buy_me_coffee}" width="200">
-    </a>
-    """.format(
-        buy_me_coffee_message=translations[lang]["buy_me_coffee_message"].format(buy_me_coffee=translations[lang]["buy_me_coffee"]),
-        buy_me_coffee=translations[lang]["buy_me_coffee"]
-    ),
-    unsafe_allow_html=True
-)
+coffee_button_html = f"""
+---
+{translations[lang]["buy_me_coffee_message"]}
+<a href="https://www.buymeacoffee.com/intisoto" target="_blank">
+    <img src="https://img.buymeacoffee.com/button-api/?text={translations[lang]["buy_me_coffee"]}&emoji=☕&slug=intisoto&button_colour=FFDD00&font_colour=000000&font_family=Arial&outline_colour=000000&coffee_colour=ffffff"
+         alt="{translations[lang]["buy_me_coffee"]}" width="200">
+</a>
+"""
+st.markdown(coffee_button_html, unsafe_allow_html=True)
