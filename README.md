@@ -61,7 +61,15 @@ AI-Powered Resume Analyzer is a web application that helps users analyze and imp
 ## Configuration
 
 - **OpenAI API Key**: If you choose to use the OpenAI API, you need to provide your OpenAI API key. You can enter the key in the application when prompted.
-- **Hugging Face API Token**: If you use the free public AI model, you can set your Hugging Face API token in the [secrets.toml](http://_vscodecontentref_/0) file.
+- **Hugging Face API Token**: If you use the free public AI model, you can set your Hugging Face API token using environment variables.
+
+### Setting Up Environment Variables
+
+1. Create a `.env` file in the root directory of the project.
+2. Add your API keys to the `.env` file:
+    ```env
+    HF_TOKEN=your_huggingface_api_token
+    ```
 
 ## Translations
 

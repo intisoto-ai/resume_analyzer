@@ -90,7 +90,7 @@ translations = {
         "openai_api": "OpenAI API",
         "download_feedback": "Download Report",
         "free_ai_disabled": "⚠️ Free AI Model is currently unavailable. Please try again later.",
-        "resume_match_score": "Your resume matches {match_score}% of the job description.",
+        "resume_match_score": "Your resume matches {match_score}% of the job description (based on keywords).",
         "match_excelent": "✅ Excellent match! Your resume aligns very well with this job.",
         "match_good": "👍 Good match! Consider emphasizing missing keywords and refining work experience.",
         "match_low": "⚠️ Low match score. Try tailoring your resume more closely to the job requirements.",
@@ -112,6 +112,7 @@ translations = {
         "clear_results": "Clear Results",
         "keep_inputs": "Keep resume and job description",
         "resume_text_preview": "Resume Text Preview",
+        "keywords_disclaimer": "_The following is a list of keywords missing from your resume. Review them and consider adding the ones most relevant to your application._",
     },
     "Español": {
         "main_title": "📄 Analizador de Currículum Impulsado por IA",
@@ -136,7 +137,7 @@ translations = {
         "openai_api": "API de OpenAI",
         "download_feedback": "Descargar Reporte",
         "free_ai_disabled": "⚠️ El modelo de IA gratuito no está disponible actualmente. Por favor, inténtalo de nuevo más tarde.",
-        "resume_match_score": "Tu currículum coincide con un **{match_score}%** de la descripción del puesto.",
+        "resume_match_score": "Tu currículum coincide con un **{match_score}%** de la descripción del puesto (basado en palabras claves).",
         "match_excelent": "✅ ¡Excelente coincidencia! Tu currículum se alinea muy bien con este puesto.",
         "match_good": "👍 ¡Buena coincidencia! Considera enfatizar las palabras clave faltantes y mejorar la experiencia laboral.",
         "match_low": "⚠️ Puntaje de coincidencia bajo. Intenta adaptar tu currículum más estrechamente a los requisitos del puesto.",
@@ -158,6 +159,7 @@ translations = {
         "clear_results": "Borrar resultados",
         "keep_inputs": "Conservar currículum y descripción del puesto",
         "resume_text_preview": "Vista previa del texto del currículum",
+        "keywords_disclaimer": "_A continuación se muestra una lista de palabras clave faltantes en tu currículum. Revísalas y considera agregar las más relevantes para tu solicitud._",
     },
 }
 
@@ -192,8 +194,9 @@ def extract_keywords(text: str) -> set:
     """
     stop_words = set(stopwords.words("english"))
     words = re.findall(r'\b[a-zA-Z]+\b', text.lower())
-    keywords = [word for word in words if word not in stop_words]
-    return set(keywords)
+    keywords = [word for word in words if word not in stop_words and word.isalnum()] # Filter out stop words and non-alphabetic words
+    # print(f"Extracted keywords: {keywords}")  # Print the extracted keywords
+    return set(keywords) #Return a set of keywords
 
 def find_missing_keywords(resume_text: str, job_description: str) -> list:
     """Finds keywords present in the job description but missing in the resume."""
@@ -559,6 +562,7 @@ if st.session_state.get("improved_resume"):
 if st.session_state.get("resume_analyzed"):
     with st.expander(translations[lang]["missing_keywords"], expanded=False):
         if st.session_state.missing_keywords:
+            st.write(translations[lang]["keywords_disclaimer"])
             st.write(", ".join(st.session_state.missing_keywords))
         else:
             st.info(translations[lang]["keywords_included"])
